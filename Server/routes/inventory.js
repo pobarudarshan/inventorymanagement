@@ -244,7 +244,8 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(401).json({ msg: 'User not authorized' });
     }
     
-    await item.remove();
+    // Use findByIdAndDelete instead of remove()
+    await Inventory.findByIdAndDelete(req.params.id);
     
     // Invalidate cache
     cache.invalidate('inventory');

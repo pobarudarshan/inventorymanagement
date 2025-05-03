@@ -15,6 +15,7 @@ const InventoryList = () => {
   const [sort, setSort] = useState('createdAt:desc');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch inventory items with search and filter
   const fetchInventory = async () => {
@@ -81,21 +82,54 @@ const InventoryList = () => {
     setShowDeleteModal(true);
   };
 
+  const closeModal = () => {
+    setShowDeleteModal(false);
+    setItemToDelete(null);
+    // Re-enable body scrolling after modal close
+    document.body.style.overflow = 'auto';
+    document.body.style.paddingRight = '0';
+  };
+
   const handleDelete = async () => {
+    if (!itemToDelete || !itemToDelete._id) {
+      closeModal();
+      return;
+    }
+    
     try {
+      setDeleteLoading(true);
       const token = localStorage.getItem('token');
+      
       await axios.delete(`/api/inventory/${itemToDelete._id}`, {
         headers: { 'x-auth-token': token }
       });
-      setShowDeleteModal(false);
-      setItemToDelete(null);
-      fetchInventory();
+      
+      // Update the local state to remove the deleted item
+      setInventory(prevInventory => 
+        prevInventory.filter(item => item._id !== itemToDelete._id)
+      );
+      
+      // Close modal properly
+      closeModal();
     } catch (err) {
       console.error('Error deleting item:', err);
-      setError('Failed to delete item');
-      setShowDeleteModal(false);
+      setError(`Failed to delete item: ${err.response?.data?.msg || err.message}`);
+      // Make sure to restore scrolling even on error
+      document.body.style.overflow = 'auto';
+      document.body.style.paddingRight = '0';
+    } finally {
+      setDeleteLoading(false);
     }
   };
+
+  // Effect to clean up any scroll issues when component unmounts
+  useEffect(() => {
+    return () => {
+      // Cleanup function to ensure body scrolling is restored
+      document.body.style.overflow = 'auto';
+      document.body.style.paddingRight = '0';
+    };
+  }, []);
 
   return (
     <>
@@ -191,7 +225,17 @@ const InventoryList = () => {
         </Card.Body>
       </Card>
       
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && (
+        <div className="alert alert-danger">
+          {error}
+          <button 
+            type="button" 
+            className="btn-close float-end" 
+            onClick={() => setError('')}
+            aria-label="Close"
+          />
+        </div>
+      )}
       
       <div className="d-flex justify-content-end mb-3">
         <Link to="/add" className="btn btn-success">
@@ -232,7 +276,7 @@ const InventoryList = () => {
                 <tr key={item._id}>
                   <td>{item.name}</td>
                   <td>{item.category}</td>
-                  <td>${item.price.toFixed(2)}</td>
+                  <td>${item.price?.toFixed(2) || '0.00'}</td>
                   <td>
                     {item.quantity <= 0 ? (
                       <Badge bg="danger">Out of Stock</Badge>
@@ -270,19 +314,53 @@ const InventoryList = () => {
       )}
       
       {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
-        <Modal.Header closeButton>
+      <Modal 
+        show={showDeleteModal} 
+        onHide={closeModal}
+        backdrop="static"
+        keyboard={!deleteLoading}
+        onEnter={() => {
+          // Save current scroll position before modal opens
+          document.body.dataset.scrollY = window.scrollY;
+        }}
+        onExited={() => {
+          // Ensure body scrolling is properly restored after animation completes
+          document.body.style.overflow = 'auto';
+          document.body.style.paddingRight = '0';
+          // Restore scroll position if needed
+          if (document.body.dataset.scrollY) {
+            window.scrollTo(0, parseInt(document.body.dataset.scrollY || '0'));
+            delete document.body.dataset.scrollY;
+          }
+        }}
+      >
+        <Modal.Header closeButton={!deleteLoading}>
           <Modal.Title>Confirm Delete</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           Are you sure you want to delete "{itemToDelete?.name}"? This action cannot be undone.
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+          <Button 
+            variant="secondary" 
+            onClick={closeModal}
+            disabled={deleteLoading}
+          >
             Cancel
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
-            Delete
+          <Button 
+            variant="danger" 
+            onClick={handleDelete}
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Deleting...
+              </>
+            ) : (
+              'Delete'
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
