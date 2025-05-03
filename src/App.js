@@ -5,6 +5,7 @@ import Header from './components/Header';
 import Auth from './components/Auth';
 import InventoryList from './components/InventoryList';
 import InventoryForm from './components/InventoryForm';
+import './styles/animations.css';
 
 // Set default axios headers
 axios.defaults.baseURL = 'http://localhost:5000';
